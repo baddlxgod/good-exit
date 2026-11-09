@@ -135,15 +135,15 @@ export default function SchedulePage() {
 
 return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-12">
-      <header className="bg-white border-b border-slate-200 px-8 py-4 mb-8">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-8 py-4 mb-6 sm:mb-8">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0">
           
           {/* Logo & User Email */}
           <div className="flex items-center space-x-4">
             <img 
               src="/Good_Exit_Logo.png" 
               alt="Good Exit Logo" 
-              className="h-10 w-auto object-contain" 
+              className="h-8 sm:h-10 w-auto object-contain" 
             />
             <div className="border-l border-slate-300 pl-4 hidden sm:block">
               <p className="text-xs text-slate-500 font-medium">{session.user.email}</p>
@@ -151,14 +151,14 @@ return (
           </div>
 
           {/* Navigation */}
-          <Link href="/" className="text-slate-500 hover:text-indigo-600 font-semibold transition-colors">
+          <Link href="/" className="text-slate-500 hover:text-indigo-600 text-sm font-semibold transition-colors">
             &larr; Back to Inventory
           </Link>
           
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         <div className="lg:col-span-5 space-y-6">
           {/* Pickup Booking */}

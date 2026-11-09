@@ -44,32 +44,33 @@ export default function GuidePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-12">
-      
-      {/* Header matching the rest of the app */}
-      <header className="bg-white border-b border-slate-200 px-8 py-4 mb-8">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-8 py-4 mb-6 sm:mb-8">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0">
+          
           <div className="flex items-center space-x-4">
             <img 
               src="/Good_Exit_Logo.png" 
               alt="Good Exit Logo" 
-              className="h-10 w-auto object-contain" 
+              className="h-8 sm:h-10 w-auto object-contain" 
             />
             <div className="border-l border-slate-300 pl-4 hidden sm:block">
               <p className="text-xs text-slate-500 font-medium">{session.user.email}</p>
             </div>
           </div>
-          <div className="flex items-center space-x-4">
-            <Link href="/" className="text-slate-500 hover:text-indigo-600 font-semibold transition-colors">
+          
+          <div className="flex flex-wrap justify-center items-center gap-3 sm:space-x-4">
+            <Link href="/" className="text-slate-500 hover:text-indigo-600 text-sm font-semibold transition-colors">
               Dashboard
             </Link>
-            <Link href="/schedule" className="text-slate-500 hover:text-indigo-600 font-semibold transition-colors">
-              Schedule & Logistics
+            <Link href="/schedule" className="bg-indigo-600 text-white px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-sm font-semibold hover:bg-indigo-700 transition-all">
+              Schedule Pickup
             </Link>
           </div>
+
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-8">
+      <main className="max-w-4xl mx-auto px-4 sm:px-8">
         
         {/* Page Title */}
         <div className="text-center mb-12">
