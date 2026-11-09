@@ -6,6 +6,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 export async function POST(request) {
   try {
     const { image } = await request.json();
+    
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -23,8 +24,13 @@ export async function POST(request) {
       ],
       response_format: { type: "json_object" }
     });
+    
     return NextResponse.json(JSON.parse(response.choices[0].message.content));
+    
   } catch (error) {
-    return NextResponse.json({ error: "Failed to classify image" }, { status: 500 });
+    // THIS LINE IS CRITICAL: It prints the real reason OpenAI failed to your Vercel logs
+    console.error("API ROUTE ERROR:", error);
+    
+    return NextResponse.json({ error: error.message || "Failed to classify image" }, { status: 500 });
   }
 }
