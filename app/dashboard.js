@@ -3,6 +3,31 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import Link from 'next/link'
 
+const compressImage = (file) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        // Max width of 800px is plenty for OpenAI to classify items
+        const MAX_WIDTH = 800; 
+        const scaleSize = MAX_WIDTH / img.width;
+        canvas.width = MAX_WIDTH;
+        canvas.height = img.height * scaleSize;
+        
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        // Compress to JPEG at 70% quality
+        resolve(canvas.toDataURL('image/jpeg', 0.7)); 
+      };
+    };
+  });
+};
+
 export default function Dashboard({ session }) {
   const [uploading, setUploading] = useState(false)
   const [items, setItems] = useState([])
@@ -26,68 +51,91 @@ export default function Dashboard({ session }) {
     if (data) setItems(data)
   }
 
-  async function handleImageUpload(e) {
-    const files = Array.from(e.target.files)
-    if (files.length === 0) return
-    
-    setUploading(true)
-
-    try {
-      for (const file of files) {
-        const fileExt = file.name.split('.').pop()
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+  // 1. Put this helper function RIGHT ABOVE your handleImageUpload function
+const compressImage = (file) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800; // Shrinks it enough for Vercel, keeps enough detail for AI
+        const scaleSize = MAX_WIDTH / img.width;
+        canvas.width = MAX_WIDTH;
+        canvas.height = img.height * scaleSize;
         
-        const { error: uploadError } = await supabase.storage
-          .from('item-images')
-          .upload(fileName, file)
-
-        if (uploadError) throw new Error("Storage Error: " + uploadError.message)
-
-        const { data: urlData } = supabase.storage.from('item-images').getPublicUrl(fileName)
-        const imageUrl = urlData.publicUrl
-
-        const base64data = await new Promise((resolve) => {
-          const reader = new FileReader()
-          reader.readAsDataURL(file)
-          reader.onloadend = () => resolve(reader.result)
-        })
-
-        const response = await fetch('/api/classify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: base64data })
-        })
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         
-        const data = await response.json()
-        
-        if (response.ok) {
-          const { data: savedItem, error } = await supabase
-            .from('items')
-            .insert([{
-              user_id: session.user.id,
-              image_url: imageUrl,
-              title: data.title,
-              description: data.description,
-              size: data.size,
-              disposition: data.disposition,
-              item_type: data.item_type,
-              box: "TBD"
-            }])
-            .select()
-            .single()
-            
-          if (!error && savedItem) {
-            setItems(prevItems => [...prevItems, savedItem])
-          }
+        resolve(canvas.toDataURL('image/jpeg', 0.7)); // Compresses to 70% quality JPEG
+      };
+    };
+  });
+};
+
+async function handleImageUpload(e) {
+  const files = Array.from(e.target.files)
+  if (files.length === 0) return
+  
+  setUploading(true)
+
+  try {
+    for (const file of files) {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+      
+      // Upload full quality image to your Supabase storage
+      const { error: uploadError } = await supabase.storage
+        .from('item-images')
+        .upload(fileName, file)
+
+      if (uploadError) throw new Error("Storage Error: " + uploadError.message)
+
+      const { data: urlData } = supabase.storage.from('item-images').getPublicUrl(fileName)
+      const imageUrl = urlData.publicUrl
+
+      // Compress the image specifically for the OpenAI API call
+      const compressedBase64 = await compressImage(file);
+
+      // Send the compressed version to Vercel/OpenAI
+      const response = await fetch('/api/classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: compressedBase64 })
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok) {
+        const { data: savedItem, error } = await supabase
+          .from('items')
+          .insert([{
+            user_id: session.user.id,
+            image_url: imageUrl,
+            title: data.title,
+            description: data.description,
+            size: data.size,
+            disposition: data.disposition,
+            item_type: data.item_type,
+            box: "TBD"
+          }])
+          .select()
+          .single()
+          
+        if (!error && savedItem) {
+          setItems(prevItems => [...prevItems, savedItem])
         }
       }
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      setUploading(false)
-      e.target.value = null
     }
+  } catch (err) {
+    alert(err.message)
+  } finally {
+    setUploading(false)
+    e.target.value = null
   }
+}
 
   const updateLocalItem = (index, field, value) => {
     const newItems = [...items]
