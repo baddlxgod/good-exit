@@ -118,28 +118,21 @@ export default function Dashboard({ session }) {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-12">
-      <header className="bg-white border-b border-slate-200 px-8 py-4 mb-8">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          
-          {/* New Logo Section */}
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-8 py-4 mb-6 sm:mb-8">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0">
           <div className="flex items-center space-x-4">
-            <img 
-              src="/Good_Exit_Logo.png" 
-              alt="Good Exit Logo" 
-              className="h-10 w-auto object-contain" 
-            />
+            <img src="/Good_Exit_Logo.png" alt="Good Exit Logo" className="h-8 sm:h-10 w-auto object-contain" />
             <div className="border-l border-slate-300 pl-4 hidden sm:block">
               <p className="text-xs text-slate-500 font-medium">{session.user.email}</p>
             </div>
           </div>
 
-          {/* Navigation */}
-          <div className="flex items-center space-x-4">
+          <div className="flex flex-wrap justify-center items-center gap-3 sm:space-x-4">
             <Link href="/guide" className="text-slate-500 hover:text-indigo-600 text-sm font-semibold transition-colors">
               How it works
             </Link>
-            <Link href="/schedule" className="bg-indigo-600 text-white px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-indigo-700 hover:shadow-lg transition-all">
-              Schedule & Logistics
+            <Link href="/schedule" className="bg-indigo-600 text-white px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-sm font-semibold hover:bg-indigo-700 transition-all">
+              Schedule Pickup
             </Link>
             <button onClick={() => supabase.auth.signOut()} className="text-slate-500 hover:text-red-500 text-sm font-semibold transition-colors">
               Log out
@@ -149,7 +142,7 @@ export default function Dashboard({ session }) {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-8 space-y-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-8 space-y-8">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center relative overflow-hidden group">
           <div className="absolute inset-0 bg-indigo-50/50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
           <h2 className="text-xl font-bold text-slate-800 mb-2">Scan new items</h2>
@@ -181,7 +174,7 @@ export default function Dashboard({ session }) {
             </div>
             
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full min-w-[900px] text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-semibold">
                     <th className="p-4 pl-6 w-24">Image</th>
