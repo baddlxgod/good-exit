@@ -2,7 +2,10 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'; // Hook imported
+import Navbar from './navbar';
 
+// Helper function (Only defined once, outside the component)
 const compressImage = (file) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -12,7 +15,6 @@ const compressImage = (file) => {
       img.src = event.target.result;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        // Max width of 800px is plenty for OpenAI to classify items
         const MAX_WIDTH = 800; 
         const scaleSize = MAX_WIDTH / img.width;
         canvas.width = MAX_WIDTH;
@@ -21,7 +23,6 @@ const compressImage = (file) => {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         
-        // Compress to JPEG at 70% quality
         resolve(canvas.toDataURL('image/jpeg', 0.7)); 
       };
     };
@@ -31,8 +32,10 @@ const compressImage = (file) => {
 export default function Dashboard({ session }) {
   const [uploading, setUploading] = useState(false)
   const [items, setItems] = useState([])
+  
+  // Activate the pathname hook here
+  const pathname = usePathname();
 
-  // The strict categories allowed in the system
   const itemTypes = ['Furniture', 'Cutlery', 'Appliances', 'Electronics', 'Clothes', 'Decor', 'Other']
   const sizes = ['Small', 'Medium', 'Large']
   const dispositions = ['Sell', 'Recycle', 'Donate']
@@ -42,100 +45,89 @@ export default function Dashboard({ session }) {
   }, [])
 
   async function fetchItems() {
+    // 1. Fetch items AND include the status of their associated pickup
     const { data } = await supabase
       .from('items')
-      .select('*')
+      .select(`
+        *,
+        pickups ( status )
+      `)
       .eq('user_id', session.user.id)
-      .is('pickup_id', null)
       .order('created_at', { ascending: true })
-    if (data) setItems(data)
+
+    if (data) {
+      // 2. Only show items that have NO pickup scheduled yet, OR are attached to a 'pending' pickup
+      const visibleItems = data.filter(item => {
+        // Keep it if it has no pickup ID
+        if (!item.pickup_id) return true; 
+        
+        // Keep it if the pickup is still pending
+        const status = (item.pickups?.status || '').toLowerCase();
+        return status === 'pending'; 
+      });
+      
+      setItems(visibleItems)
+    }
   }
 
-  // 1. Put this helper function RIGHT ABOVE your handleImageUpload function
-const compressImage = (file) => {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new window.Image();
-      img.src = event.target.result;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 800; // Shrinks it enough for Vercel, keeps enough detail for AI
-        const scaleSize = MAX_WIDTH / img.width;
-        canvas.width = MAX_WIDTH;
-        canvas.height = img.height * scaleSize;
+  async function handleImageUpload(e) {
+    const files = Array.from(e.target.files)
+    if (files.length === 0) return
+    
+    setUploading(true)
+
+    try {
+      for (const file of files) {
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
         
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const { error: uploadError } = await supabase.storage
+          .from('item-images')
+          .upload(fileName, file)
+
+        if (uploadError) throw new Error("Storage Error: " + uploadError.message)
+
+        const { data: urlData } = supabase.storage.from('item-images').getPublicUrl(fileName)
+        const imageUrl = urlData.publicUrl
+
+        const compressedBase64 = await compressImage(file);
+
+        const response = await fetch('/api/classify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: compressedBase64 })
+        })
         
-        resolve(canvas.toDataURL('image/jpeg', 0.7)); // Compresses to 70% quality JPEG
-      };
-    };
-  });
-};
-
-async function handleImageUpload(e) {
-  const files = Array.from(e.target.files)
-  if (files.length === 0) return
-  
-  setUploading(true)
-
-  try {
-    for (const file of files) {
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
-      
-      // Upload full quality image to your Supabase storage
-      const { error: uploadError } = await supabase.storage
-        .from('item-images')
-        .upload(fileName, file)
-
-      if (uploadError) throw new Error("Storage Error: " + uploadError.message)
-
-      const { data: urlData } = supabase.storage.from('item-images').getPublicUrl(fileName)
-      const imageUrl = urlData.publicUrl
-
-      // Compress the image specifically for the OpenAI API call
-      const compressedBase64 = await compressImage(file);
-
-      // Send the compressed version to Vercel/OpenAI
-      const response = await fetch('/api/classify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: compressedBase64 })
-      })
-      
-      const data = await response.json()
-      
-      if (response.ok) {
-        const { data: savedItem, error } = await supabase
-          .from('items')
-          .insert([{
-            user_id: session.user.id,
-            image_url: imageUrl,
-            title: data.title,
-            description: data.description,
-            size: data.size,
-            disposition: data.disposition,
-            item_type: data.item_type,
-            box: "TBD"
-          }])
-          .select()
-          .single()
-          
-        if (!error && savedItem) {
-          setItems(prevItems => [...prevItems, savedItem])
+        const data = await response.json()
+        
+        if (response.ok) {
+          const { data: savedItem, error } = await supabase
+            .from('items')
+            .insert([{
+              user_id: session.user.id,
+              image_url: imageUrl,
+              title: data.title,
+              description: data.description,
+              size: data.size,
+              disposition: data.disposition,
+              item_type: data.item_type,
+              box: "TBD"
+            }])
+            .select()
+            .single()
+            
+          if (!error && savedItem) {
+            setItems(prevItems => [...prevItems, savedItem])
+          }
         }
       }
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setUploading(false)
+      e.target.value = null
     }
-  } catch (err) {
-    alert(err.message)
-  } finally {
-    setUploading(false)
-    e.target.value = null
   }
-}
 
   const updateLocalItem = (index, field, value) => {
     const newItems = [...items]
@@ -166,29 +158,9 @@ async function handleImageUpload(e) {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-12">
-      <header className="bg-white border-b border-slate-200 px-4 sm:px-8 py-4 mb-6 sm:mb-8">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0">
-          <div className="flex items-center space-x-4">
-            <img src="/Good_Exit_Logo.png" alt="Good Exit Logo" className="h-8 sm:h-10 w-auto object-contain" />
-            <div className="border-l border-slate-300 pl-4 hidden sm:block">
-              <p className="text-xs text-slate-500 font-medium">{session.user.email}</p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap justify-center items-center gap-3 sm:space-x-4">
-            <Link href="/guide" className="text-slate-500 hover:text-indigo-600 text-sm font-semibold transition-colors">
-              How it works
-            </Link>
-            <Link href="/schedule" className="bg-indigo-600 text-white px-4 sm:px-5 py-2 sm:py-2.5 rounded-full text-sm font-semibold hover:bg-indigo-700 transition-all">
-              Schedule Pickup
-            </Link>
-            <button onClick={() => supabase.auth.signOut()} className="text-slate-500 hover:text-red-500 text-sm font-semibold transition-colors">
-              Log out
-            </button>
-          </div>
-          
-        </div>
-      </header>
+      
+      {/* New Header with Pill Navigation */}
+      <Navbar email={session?.user?.email} />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-8 space-y-8">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center relative overflow-hidden group">
@@ -247,8 +219,6 @@ async function handleImageUpload(e) {
                       <td className="p-4">
                         <input value={item.title || ''} onChange={(e) => updateLocalItem(index, 'title', e.target.value)} className="w-full p-2 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-indigo-300 rounded outline-none transition-all font-medium text-slate-700" />
                       </td>
-                      
-                      {/* Type Dropdown */}
                       <td className="p-4">
                         <select 
                           value={item.item_type || ''} 
@@ -259,8 +229,6 @@ async function handleImageUpload(e) {
                           {itemTypes.map(type => <option key={type} value={type}>{type}</option>)}
                         </select>
                       </td>
-                      
-                      {/* Size Dropdown */}
                       <td className="p-4">
                         <select 
                           value={item.size || ''} 
@@ -271,8 +239,6 @@ async function handleImageUpload(e) {
                           {sizes.map(size => <option key={size} value={size}>{size}</option>)}
                         </select>
                       </td>
-                      
-                      {/* Disposition Dropdown */}
                       <td className="p-4">
                         <select 
                           value={item.disposition || ''} 
@@ -283,7 +249,6 @@ async function handleImageUpload(e) {
                           {dispositions.map(disp => <option key={disp} value={disp}>{disp}</option>)}
                         </select>
                       </td>
-                      
                       <td className="p-4">
                         <input value={item.box || ''} onChange={(e) => updateLocalItem(index, 'box', e.target.value)} className="w-full p-2 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-indigo-300 rounded outline-none transition-all text-sm text-center font-semibold text-slate-700" />
                       </td>
@@ -299,6 +264,17 @@ async function handleImageUpload(e) {
           </div>
         )}
       </main>
+
+      {/* New Footer for Logout */}
+      <div className="mt-20 pt-8 border-t border-slate-200 flex justify-center pb-8">
+        <button 
+          onClick={() => supabase.auth.signOut()} 
+          className="text-slate-400 hover:text-red-500 text-sm font-semibold transition-colors"
+        >
+          Log out securely
+        </button>
+      </div>
+
     </div>
   )
 }
